@@ -7,24 +7,45 @@ const openai = new OpenAI({
 
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY
 
+// Define a flexible asset type
+interface Asset {
+  id: string
+  type: 'image' | 'video'
+  url: string
+  thumbnailUrl: string
+  source: 'pexels' | 'ai' | 'upload'
+  metadata: {
+    width: number
+    height: number
+    alt: string
+    photographer: string
+  }
+  score: number
+  selected: boolean
+}
+
 // Mock Pexels search for now
-async function searchPexelsImages(query: string, aspectRatio: string, perPage: number = 10) {
+async function searchPexelsImages(query: string, aspectRatio: string, perPage: number = 10): Promise<Asset[]> {
   // For now, return mock data
   // TODO: Add real Pexels API integration
   return Array.from({ length: perPage }, (_, i) => ({
     id: `mock-${i}`,
-    width: aspectRatio === '16:9' ? 1920 : aspectRatio === '9:16' ? 1080 : 1080,
-    height: aspectRatio === '16:9' ? 1080 : aspectRatio === '9:16' ? 1920 : 1080,
-    photographer: 'Mock Photographer',
-    src: {
-      large: `https://images.pexels.com/photos/414612/pexels-photo-414612.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940`,
-      medium: `https://images.pexels.com/photos/414612/pexels-photo-414612.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500`,
+    type: 'image' as const,
+    url: `https://images.pexels.com/photos/414612/pexels-photo-414612.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940`,
+    thumbnailUrl: `https://images.pexels.com/photos/414612/pexels-photo-414612.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500`,
+    source: 'pexels' as const,
+    metadata: {
+      width: aspectRatio === '16:9' ? 1920 : aspectRatio === '9:16' ? 1080 : 1080,
+      height: aspectRatio === '16:9' ? 1080 : aspectRatio === '9:16' ? 1920 : 1080,
+      alt: `${query} image ${i + 1}`,
+      photographer: 'Mock Photographer',
     },
-    alt: `${query} image ${i + 1}`,
+    score: Math.random() * 0.8 + 0.2, // Random score between 0.2-1.0
+    selected: false,
   }))
 }
 
-async function generateAIImages(prompt: string, aspectRatio: string, count: number = 1) {
+async function generateAIImages(prompt: string, aspectRatio: string, count: number = 1): Promise<Asset[]> {
   try {
     const sizeMap = {
       '16:9': '1792x1024',
@@ -42,7 +63,6 @@ async function generateAIImages(prompt: string, aspectRatio: string, count: numb
       quality: "standard",
     })
 
-    // Fix: Handle potential undefined response.data
     if (!response.data || response.data.length === 0) {
       return []
     }
@@ -51,13 +71,13 @@ async function generateAIImages(prompt: string, aspectRatio: string, count: numb
       id: `ai-${Date.now()}-${index}`,
       type: 'image' as const,
       url: image.url || '',
-      thumbnailUrl: image.url || '', // Add this missing field
+      thumbnailUrl: image.url || '',
       source: 'ai' as const,
       metadata: {
         width: parseInt(size.split('x')[0]),
         height: parseInt(size.split('x')[1]),
         alt: prompt,
-        photographer: 'AI Generated', // Add this missing field
+        photographer: 'AI Generated',
       },
       score: 0.9,
       selected: false,
@@ -68,10 +88,9 @@ async function generateAIImages(prompt: string, aspectRatio: string, count: numb
   }
 }
 
-function calculateSemanticScore(asset: any, beatText: string): number {
+function calculateSemanticScore(asset: Asset, beatText: string): number {
   // Simple keyword matching for now
-  // TODO: Implement proper embeddings-based semantic similarity
-  const assetText = (asset.alt || asset.photographer || '').toLowerCase()
+  const assetText = (asset.metadata.alt || asset.metadata.photographer || '').toLowerCase()
   const beatWords = beatText.toLowerCase().split(' ')
   
   let matchScore = 0
@@ -93,41 +112,30 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate search query from beat text
-    const searchQuery = beatText.slice(0, 100) // Limit query length
+    const searchQuery = beatText.slice(0, 100)
     
     // Set thresholds based on AI aggressiveness
     const stockMinScore = Math.max(0.3, 0.7 - (aiAggressiveness || 0.5) * 0.4)
-    const maxAssetsPerBeat = 1 // Start with 1 asset per beat
+    const maxAssetsPerBeat = 1
     
     console.log(`Searching for: "${searchQuery}" (min score: ${stockMinScore})`)
 
     // Search stock images
-    const stockImages = await searchPexelsImages(searchQuery, aspectRatio, 10)
+    const stockAssets = await searchPexelsImages(searchQuery, aspectRatio, 10)
 
-    // Convert to standardized format and calculate scores
-    const stockAssets = stockImages.map(photo => ({
-      id: `pexels-img-${photo.id}`,
-      type: 'image' as const,
-      url: photo.src.large,
-      thumbnailUrl: photo.src.medium,
-      source: 'pexels' as const,
-      metadata: {
-        width: photo.width,
-        height: photo.height,
-        alt: photo.alt,
-        photographer: photo.photographer,
-      },
-      score: calculateSemanticScore(photo, beatText),
-      selected: false,
+    // Update scores based on semantic analysis
+    const scoredStockAssets = stockAssets.map(asset => ({
+      ...asset,
+      score: calculateSemanticScore(asset, beatText)
     }))
 
     // Filter and sort stock assets by score
-    const goodStockAssets = stockAssets
+    const goodStockAssets = scoredStockAssets
       .filter(asset => asset.score >= stockMinScore)
       .sort((a, b) => b.score - a.score)
       .slice(0, maxAssetsPerBeat)
 
-    let finalAssets = [...goodStockAssets]
+    let finalAssets: Asset[] = [...goodStockAssets]
 
     // Generate AI assets if needed
     if (finalAssets.length < maxAssetsPerBeat && (aiAggressiveness || 0) > 0.1) {
@@ -149,7 +157,7 @@ export async function POST(req: NextRequest) {
       assets: finalAssets,
       metadata: {
         searchQuery,
-        stockResults: stockAssets.length,
+        stockResults: scoredStockAssets.length,
         stockMinScore,
         aiAssetsGenerated: finalAssets.filter(a => a.source === 'ai').length,
       }
