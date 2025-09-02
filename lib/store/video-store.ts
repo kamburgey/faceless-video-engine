@@ -175,3 +175,137 @@ export const useVideoStore = create<VideoStore>()(
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ text, beatId }),
             })
+
+            const { audioUrl, duration } = await response.json()
+            
+            get().updateBeat(beatId, {
+              voiceUrl: audioUrl,
+              voiceDuration: duration,
+              duration: duration,
+            })
+          } catch (error) {
+            console.error('Voice generation failed:', error)
+          }
+        },
+
+        autoCompose: async () => {
+          const { currentProject, aiAggressiveness } = get()
+          if (!currentProject) return
+
+          set({ isGenerating: true })
+
+          try {
+            // Process each beat
+            for (const beat of currentProject.beats) {
+              const response = await fetch('/api/compose', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  beatText: beat.text,
+                  tone: currentProject.tone,
+                  template: currentProject.template,
+                  aspectRatio: currentProject.aspectRatio,
+                  aiAggressiveness,
+                }),
+              })
+
+              const { assets } = await response.json()
+              
+              get().updateBeat(beat.id, { assets })
+            }
+          } catch (error) {
+            console.error('Auto-compose failed:', error)
+          } finally {
+            set({ isGenerating: false })
+          }
+        },
+
+        updateBeat: (beatId: string, updates: Partial<Beat>) => {
+          set((state) => {
+            if (!state.currentProject) return state
+            
+            const updatedBeats = state.currentProject.beats.map(beat =>
+              beat.id === beatId ? { ...beat, ...updates } : beat
+            )
+            
+            const updatedProject = {
+              ...state.currentProject,
+              beats: updatedBeats,
+              updatedAt: new Date(),
+            }
+            
+            return {
+              currentProject: updatedProject,
+              projects: state.projects.map(p =>
+                p.id === updatedProject.id ? updatedProject : p
+              ),
+            }
+          })
+        },
+
+        selectAsset: (beatId: string, assetId: string) => {
+          set((state) => {
+            if (!state.currentProject) return state
+            
+            const updatedBeats = state.currentProject.beats.map(beat => {
+              if (beat.id !== beatId) return beat
+              
+              return {
+                ...beat,
+                assets: beat.assets.map(asset => ({
+                  ...asset,
+                  selected: asset.id === assetId,
+                })),
+              }
+            })
+            
+            const updatedProject = {
+              ...state.currentProject,
+              beats: updatedBeats,
+              updatedAt: new Date(),
+            }
+            
+            return {
+              currentProject: updatedProject,
+              projects: state.projects.map(p =>
+                p.id === updatedProject.id ? updatedProject : p
+              ),
+            }
+          })
+        },
+
+        setAiAggressiveness: (value: number) => {
+          set({ aiAggressiveness: value })
+        },
+
+        nextStep: () => {
+          set((state) => ({
+            currentStep: Math.min(state.currentStep + 1, 4),
+          }))
+        },
+
+        prevStep: () => {
+          set((state) => ({
+            currentStep: Math.max(state.currentStep - 1, 0),
+          }))
+        },
+
+        reset: () => {
+          set({
+            currentProject: null,
+            currentStep: 0,
+            isGenerating: false,
+          })
+        },
+      }),
+      {
+        name: 'video-store',
+        partialize: (state) => ({
+          projects: state.projects,
+          aiAggressiveness: state.aiAggressiveness,
+        }),
+      }
+    ),
+    { name: 'VideoStore' }
+  )
+)
