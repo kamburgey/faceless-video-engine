@@ -89,7 +89,6 @@ export default function HomePage() {
 
         <div className="bg-white rounded-xl shadow-lg p-8">
           {!isGenerating && !result ? (
-            // Input Form
             <form onSubmit={handleGenerate} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
@@ -167,7 +166,7 @@ export default function HomePage() {
                   type="submit" 
                   className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-xl text-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-[1.02]"
                 >
-                  ✨ Generate My Video
+                  Generate My Video
                 </button>
                 <p className="text-center text-sm text-gray-500 mt-3">
                   AI will handle script, voice, visuals, and editing automatically
@@ -175,7 +174,6 @@ export default function HomePage() {
               </div>
             </form>
           ) : isGenerating ? (
-            // Progress Display
             <div className="text-center space-y-6">
               <div className="w-16 h-16 mx-auto">
                 <div className="w-full h-full border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -201,7 +199,6 @@ export default function HomePage() {
               </div>
             </div>
           ) : result ? (
-            // Result Display
             <div className="text-center space-y-6">
               <div className="text-6xl mb-4">🎬</div>
               <div>
@@ -228,7 +225,7 @@ export default function HomePage() {
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
 
           {error && (
             <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
