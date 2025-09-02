@@ -51,13 +51,15 @@ async function generateAIImages(prompt: string, aspectRatio: string, count: numb
       id: `ai-${Date.now()}-${index}`,
       type: 'image' as const,
       url: image.url || '',
+      thumbnailUrl: image.url || '', // Add this missing field
       source: 'ai' as const,
       metadata: {
         width: parseInt(size.split('x')[0]),
         height: parseInt(size.split('x')[1]),
         alt: prompt,
+        photographer: 'AI Generated', // Add this missing field
       },
-      score: 0.9, // AI images get a high score
+      score: 0.9,
       selected: false,
     }))
   } catch (error) {
