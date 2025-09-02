@@ -42,10 +42,15 @@ async function generateAIImages(prompt: string, aspectRatio: string, count: numb
       quality: "standard",
     })
 
+    // Fix: Handle potential undefined response.data
+    if (!response.data || response.data.length === 0) {
+      return []
+    }
+
     return response.data.map((image, index) => ({
       id: `ai-${Date.now()}-${index}`,
       type: 'image' as const,
-      url: image.url!,
+      url: image.url || '',
       source: 'ai' as const,
       metadata: {
         width: parseInt(size.split('x')[0]),
